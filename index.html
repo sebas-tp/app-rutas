@@ -1,22 +1,36 @@
-
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GeoRoute Optimizer</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
       
+      /* ESTO ES LO QUE ARREGLA EL MAPA CORTADO */
+      html, body, #root {
+        height: 100%;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden; /* Evita scrolls dobles */
+      }
+      
       body { font-family: 'Inter', sans-serif; }
       
+      /* Asegura que el contenedor del mapa llene el espacio */
       .leaflet-container {
         height: 100%;
         width: 100%;
+        background: #e2e8f0;
       }
       
+      /* Tus estilos de marcadores */
       .marker-label {
         background: white;
         border: 2px solid #3b82f6;
@@ -42,36 +56,11 @@
         .print-only { display: block !important; }
         body { background: white; }
         .leaflet-control-container { display: none !important; }
-        .print-container { 
-          display: flex !important; 
-          flex-direction: column !important;
-          padding: 20px;
-        }
-        .print-map {
-          height: 400px !important;
-          width: 100% !important;
-          border: 1px solid #eee;
-          margin-bottom: 20px;
-        }
       }
-      .print-only { display: none; }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "react-leaflet": "https://esm.sh/react-leaflet@^5.0.0",
-    "leaflet": "https://esm.sh/leaflet@^1.9.4"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-</head>
+  </head>
   <body>
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>
