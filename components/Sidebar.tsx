@@ -7,7 +7,6 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';             
 import { Stop, GeocodingResult, SavedRoute, RouteData } from '../types';
 import { geocodeSearch, reverseGeocode } from '../services/orsService';
-// Importamos el nuevo modal de estadísticas
 import StatsModal from './StatsModal';
 
 interface SidebarProps {
@@ -20,6 +19,7 @@ interface SidebarProps {
   onOptimize: (startTime: string) => void;
   onSaveRoute: (name: string) => void;
   onLoadRoute: (route: SavedRoute) => void;
+  onDeleteRoute: (id: string) => void; // <--- PROP NUEVA
   savedRoutes: SavedRoute[];
   loading: boolean;
   error: string | null;
@@ -28,8 +28,8 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({
   stops, route, onAddStop, onRemoveStop, onUpdateStop, onSetDepot, 
-  onOptimize, onSaveRoute, onLoadRoute, savedRoutes, 
-  loading, error, isOptimized
+  onOptimize, onSaveRoute, onLoadRoute, onDeleteRoute, // <--- RECIBIMOS LA PROP
+  savedRoutes, loading, error, isOptimized
 }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GeocodingResult[]>([]);
@@ -38,8 +38,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [expandedStop, setExpandedStop] = useState<string | null>(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [startTime, setStartTime] = useState('08:00');
-  
-  // Estado para controlar el modal de estadísticas
   const [showStats, setShowStats] = useState(false);
 
   // --- BUSCADOR ---
@@ -163,7 +161,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               <Navigation className="w-6 h-6 text-blue-400" />
               <h1 className="text-xl font-bold tracking-tight">GeoRoute <span className="text-blue-500">Logistics</span></h1>
             </div>
-            {/* BOTÓN NUEVO: DASHBOARD */}
+            {/* BOTÓN DASHBOARD */}
             <button 
               onClick={() => setShowStats(true)}
               className="bg-slate-800 p-2 rounded-lg text-slate-400 hover:text-blue-400 hover:bg-slate-700 transition-all"
@@ -385,7 +383,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </>
         ) : (
-          /* VISTA DE RUTAS GUARDADAS */
+          /* VISTA DE RUTAS GUARDADAS (CON BOTÓN DE BORRAR) */
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
             {savedRoutes.length === 0 ? (
               <div className="text-center py-10 opacity-40">
@@ -397,20 +395,34 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <div 
                   key={route.id}
                   onClick={() => onLoadRoute(route)}
-                  className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm cursor-pointer hover:border-blue-400 transition-all group"
+                  className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm cursor-pointer hover:border-blue-400 transition-all group relative"
                 >
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-black text-slate-900 group-hover:text-blue-600">{route.name}</h3>
-                    <span className="text-[10px] font-bold text-slate-400">{route.date}</span>
+                  {/* BOTÓN DE BORRAR (FLOTANTE A LA DERECHA) */}
+                  <button 
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      onDeleteRoute(route.id); 
+                    }}
+                    className="absolute top-3 right-3 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                    title="Eliminar ruta"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+
+                  <div className="flex justify-between items-start mb-2 pr-8">
+                    <h3 className="font-black text-slate-900 group-hover:text-blue-600 truncate">{route.name}</h3>
                   </div>
+                  
                   <div className="flex justify-between items-end">
-                    <p className="text-xs text-slate-500">{route.stops.length} paradas</p>
-                    {/* MOSTRAMOS EL KM SI EXISTE EN LA DB */}
-                    {route.totalDistance && (
-                      <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                        {(route.totalDistance / 1000).toFixed(1)} km
-                      </span>
-                    )}
+                       <span className="text-[10px] font-bold text-slate-400">{route.date}</span>
+                       <div className="flex gap-2">
+                          <span className="text-[10px] font-medium text-slate-500">{route.stops.length} stops</span>
+                          {route.totalDistance && (
+                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                              {(route.totalDistance / 1000).toFixed(1)} km
+                            </span>
+                          )}
+                       </div>
                   </div>
                 </div>
               ))
@@ -419,7 +431,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      {/* RENDERIZADO DEL MODAL */}
       <StatsModal 
         isOpen={showStats} 
         onClose={() => setShowStats(false)} 
