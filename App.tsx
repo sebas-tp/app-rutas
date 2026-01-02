@@ -12,7 +12,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
 
-  // Cargar rutas guardadas al iniciar
+  // Cargar rutas guardadas del localStorage al iniciar
   useEffect(() => {
     const saved = localStorage.getItem('georoute_saved');
     if (saved) setSavedRoutes(JSON.parse(saved));
@@ -51,6 +51,7 @@ const App: React.FC = () => {
   const handleRemoveStop = (id: string) => {
     setStops(prev => {
       const filtered = prev.filter(s => s.id !== id);
+      // Si borramos el depósito, el siguiente en la lista pasa a ser depósito por seguridad
       if (prev.find(s => s.id === id)?.isDepot && filtered.length > 0) {
         filtered[0].isDepot = true;
       }
@@ -82,20 +83,27 @@ const App: React.FC = () => {
     setError(null);
   };
 
-  const handleOptimize = async () => {
+  // --- LÓGICA CENTRAL DE OPTIMIZACIÓN ---
+  // Ahora recibe 'startTime' desde el Sidebar para calcular bien las esperas
+  const handleOptimize = async (startTime: string) => {
     if (stops.length < 2) return;
+    
     setLoading(true);
     setError(null);
+    
     try {
-      const result = await optimizeRoute(stops);
+      // Llamamos al servicio pasando la hora de inicio elegida
+      const result = await optimizeRoute(stops, startTime);
       setRoute(result);
 
+      // Asignar el orden devuelto por la API a nuestras paradas visuales
       const updatedStops = [...stops].map(s => ({ ...s, order: undefined }));
       const otherStops = stops.filter(s => !s.isDepot);
       
       let stepCounter = 1;
       result.steps.forEach((step: any) => {
         if (step.type === 'job') {
+          // step.id viene del servicio (1, 2, 3...) y machea con el índice del array de trabajos
           const originalStop = otherStops[step.id - 1];
           const st = updatedStops.find(s => s.id === originalStop?.id);
           if (st) st.order = stepCounter++;
@@ -110,6 +118,7 @@ const App: React.FC = () => {
     }
   };
 
+  // Ordenar paradas para la vista de impresión/PDF
   const orderedStops = [...stops].sort((a, b) => (a.order || 0) - (b.order || 0));
 
   return (
@@ -122,7 +131,7 @@ const App: React.FC = () => {
         onRemoveStop={handleRemoveStop}
         onUpdateStop={handleUpdateStop}
         onSetDepot={handleSetDepot}
-        onOptimize={handleOptimize}
+        onOptimize={handleOptimize} // Conectamos la función actualizada
         onSaveRoute={handleSaveRoute}
         onLoadRoute={handleLoadRoute}
         savedRoutes={savedRoutes}
@@ -131,6 +140,7 @@ const App: React.FC = () => {
         isOptimized={!!route}
       />
       
+      {/* CONTENEDOR PRINCIPAL DEL MAPA */}
       <main className="flex-1 flex flex-col h-full relative no-print">
         <MapComponent stops={stops} route={route} onMapClick={handleMapClick} />
         
@@ -151,7 +161,8 @@ const App: React.FC = () => {
       </main>
 
       {/* =================================================================================
-          VISTA DE REPORTE OCULTA (Invisible pero renderizable para PDF)
+          VISTA DE REPORTE OCULTA (PLANTILLA PARA PDF)
+          Nota: Se usa 'invisible' y 'fixed' para que no afecte el layout pero exista en el DOM
          ================================================================================= */}
       <div 
         id="report-preview" 
