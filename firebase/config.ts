@@ -1,11 +1,8 @@
-// Import the functions you need from the SDKs you need
+// 1. Importamos las funciones necesarias
 import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+import { getFirestore } from "firebase/firestore"; // <--- ESTO ES CRUCIAL
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// 2. Tu configuración (la misma que ya tenías)
 const firebaseConfig = {
   apiKey: "AIzaSyDsTnvr9JcrgGoeFmKKA-fHIal6o8RULZ4",
   authDomain: "app-rutas-f63f5.firebaseapp.com",
@@ -16,6 +13,9 @@ const firebaseConfig = {
   measurementId: "G-7T9R6RHKJT"
 };
 
-// Initialize Firebase
+// 3. Inicializamos Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+
+// 4. Inicializamos y EXPORTAMOS la base de datos (db)
+// El error ocurría porque esta línea faltaba o era diferente
+export const db = getFirestore(app);
