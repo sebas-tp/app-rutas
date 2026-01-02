@@ -1,10 +1,8 @@
-
 /**
- * 1. Regístrate en https://openrouteservice.org/dev/#/signup
- * 2. Copia tu API Key (Token de 64 caracteres hexadecimales)
- * 3. Reemplaza el valor de abajo
+ * Configuración de API Keys y Endpoints
+ * La Key se carga desde las variables de entorno (Vercel)
  */
-export const ORS_API_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImI5ODA3ODY1Mzk2MjQzNGY4YzExNDlhZGI1ZmQ0YTZmIiwiaCI6Im11cm11cjY0In0='; 
+export const ORS_API_KEY = import.meta.env.VITE_ORS_API_KEY; 
 
 export const API_ENDPOINTS = {
   GEOCODE: 'https://api.openrouteservice.org/geocode/search',
@@ -12,4 +10,5 @@ export const API_ENDPOINTS = {
   OPTIMIZATION: 'https://api.openrouteservice.org/optimization',
 };
 
-export const DEFAULT_CENTER: [number, number] = [-34.9214, -57.9545]; // La Plata, Argentina
+// Vi que ya está centrada en La Plata, ¡excelente!
+export const DEFAULT_CENTER: [number, number] = [-34.9214, -57.9545];
