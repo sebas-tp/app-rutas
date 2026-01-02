@@ -4,6 +4,8 @@ import Sidebar from './components/Sidebar';
 import MapComponent from './components/MapComponent';
 import { Stop, RouteData, SavedRoute } from './types';
 import { optimizeRoute, reverseGeocode } from './services/orsService';
+// IMPORTAMOS LOS NUEVOS SERVICIOS DE LA NUBE
+import { saveRouteToCloud, getRoutesFromCloud } from './services/routeService';
 
 const App: React.FC = () => {
   const [stops, setStops] = useState<Stop[]>([]);
@@ -11,11 +13,21 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
+  
+  // Nuevo estado para mostrar carga cuando guardamos/cargamos de la nube
+  const [isCloudLoading, setIsCloudLoading] = useState(false);
 
-  // Cargar rutas guardadas del localStorage al iniciar
+  // EFECTO DE CARGA INICIAL (Trae las rutas de Firebase)
   useEffect(() => {
-    const saved = localStorage.getItem('georoute_saved');
-    if (saved) setSavedRoutes(JSON.parse(saved));
+    const fetchRoutes = async () => {
+      try {
+        const cloudRoutes = await getRoutesFromCloud();
+        setSavedRoutes(cloudRoutes);
+      } catch (err) {
+        console.error("Error conectando a la nube", err);
+      }
+    };
+    fetchRoutes();
   }, []);
 
   const handleAddStop = (stop: Stop) => {
@@ -51,7 +63,6 @@ const App: React.FC = () => {
   const handleRemoveStop = (id: string) => {
     setStops(prev => {
       const filtered = prev.filter(s => s.id !== id);
-      // Si borramos el depósito, el siguiente en la lista pasa a ser depósito por seguridad
       if (prev.find(s => s.id === id)?.isDepot && filtered.length > 0) {
         filtered[0].isDepot = true;
       }
@@ -65,16 +76,24 @@ const App: React.FC = () => {
     setRoute(null);
   };
 
-  const handleSaveRoute = (name: string) => {
-    const newRoute: SavedRoute = {
-      id: Date.now().toString(),
-      name,
-      date: new Date().toLocaleDateString(),
-      stops: [...stops],
-    };
-    const updated = [newRoute, ...savedRoutes];
-    setSavedRoutes(updated);
-    localStorage.setItem('georoute_saved', JSON.stringify(updated));
+  // --- NUEVA LÓGICA DE GUARDADO (FIREBASE) ---
+  const handleSaveRoute = async (name: string) => {
+    setIsCloudLoading(true); // Activamos spinner
+    try {
+      // 1. Guardamos en la nube
+      await saveRouteToCloud(name, stops, route);
+      
+      // 2. Volvemos a pedir la lista actualizada para ver la nueva ruta
+      const updatedRoutes = await getRoutesFromCloud();
+      setSavedRoutes(updatedRoutes);
+      
+      alert("✅ ¡Ruta guardada en la nube con éxito!");
+    } catch (error) {
+      console.error(error);
+      alert("❌ Error al guardar en la nube. Revisa tu conexión.");
+    } finally {
+      setIsCloudLoading(false); // Apagamos spinner
+    }
   };
 
   const handleLoadRoute = (saved: SavedRoute) => {
@@ -83,27 +102,20 @@ const App: React.FC = () => {
     setError(null);
   };
 
-  // --- LÓGICA CENTRAL DE OPTIMIZACIÓN ---
-  // Ahora recibe 'startTime' desde el Sidebar para calcular bien las esperas
   const handleOptimize = async (startTime: string) => {
     if (stops.length < 2) return;
-    
     setLoading(true);
     setError(null);
-    
     try {
-      // Llamamos al servicio pasando la hora de inicio elegida
       const result = await optimizeRoute(stops, startTime);
       setRoute(result);
 
-      // Asignar el orden devuelto por la API a nuestras paradas visuales
       const updatedStops = [...stops].map(s => ({ ...s, order: undefined }));
       const otherStops = stops.filter(s => !s.isDepot);
       
       let stepCounter = 1;
       result.steps.forEach((step: any) => {
         if (step.type === 'job') {
-          // step.id viene del servicio (1, 2, 3...) y machea con el índice del array de trabajos
           const originalStop = otherStops[step.id - 1];
           const st = updatedStops.find(s => s.id === originalStop?.id);
           if (st) st.order = stepCounter++;
@@ -118,7 +130,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Ordenar paradas para la vista de impresión/PDF
   const orderedStops = [...stops].sort((a, b) => (a.order || 0) - (b.order || 0));
 
   return (
@@ -131,24 +142,26 @@ const App: React.FC = () => {
         onRemoveStop={handleRemoveStop}
         onUpdateStop={handleUpdateStop}
         onSetDepot={handleSetDepot}
-        onOptimize={handleOptimize} // Conectamos la función actualizada
+        onOptimize={handleOptimize}
         onSaveRoute={handleSaveRoute}
         onLoadRoute={handleLoadRoute}
         savedRoutes={savedRoutes}
-        loading={loading}
+        // Mostramos carga si estamos optimizando O si estamos guardando en la nube
+        loading={loading || isCloudLoading}
         error={error}
         isOptimized={!!route}
       />
       
-      {/* CONTENEDOR PRINCIPAL DEL MAPA */}
       <main className="flex-1 flex flex-col h-full relative no-print">
         <MapComponent stops={stops} route={route} onMapClick={handleMapClick} />
         
-        {loading && (
+        {(loading || isCloudLoading) && (
           <div className="absolute inset-0 bg-white/20 backdrop-blur-[2px] z-[2000] flex items-center justify-center">
             <div className="bg-white p-6 rounded-3xl shadow-2xl flex flex-col items-center gap-4 border border-blue-100">
               <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
-              <p className="font-black text-slate-800 uppercase tracking-widest text-[10px]">Optimizando logística...</p>
+              <p className="font-black text-slate-800 uppercase tracking-widest text-[10px]">
+                {isCloudLoading ? 'Guardando en la nube...' : 'Optimizando logística...'}
+              </p>
             </div>
           </div>
         )}
@@ -160,14 +173,8 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* =================================================================================
-          VISTA DE REPORTE OCULTA (PLANTILLA PARA PDF)
-          Nota: Se usa 'invisible' y 'fixed' para que no afecte el layout pero exista en el DOM
-         ================================================================================= */}
-      <div 
-        id="report-preview" 
-        className="fixed top-0 left-0 w-[210mm] min-h-[297mm] bg-white p-8 z-[-1000] invisible"
-      >
+      {/* --- VISTA DE REPORTE OCULTA (Para el PDF) --- */}
+      <div id="report-preview" className="fixed top-0 left-0 w-[210mm] min-h-[297mm] bg-white p-8 z-[-1000] invisible">
         <div className="flex justify-between items-start border-b-4 border-slate-900 pb-4 mb-6">
           <div>
             <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Hoja de Ruta</h1>
@@ -179,7 +186,6 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Mapa estático para el reporte */}
         <div className="border rounded-2xl overflow-hidden mb-8 h-[350px] w-full border-slate-200">
            {route && <MapComponent stops={stops} route={route} onMapClick={() => {}} />}
         </div>
