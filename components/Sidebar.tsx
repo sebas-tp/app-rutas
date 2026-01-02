@@ -19,7 +19,7 @@ interface SidebarProps {
   onOptimize: (startTime: string) => void;
   onSaveRoute: (name: string) => void;
   onLoadRoute: (route: SavedRoute) => void;
-  onDeleteRoute: (id: string) => void; // <--- PROP NUEVA
+  onDeleteRoute: (id: string) => void;
   savedRoutes: SavedRoute[];
   loading: boolean;
   error: string | null;
@@ -28,7 +28,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({
   stops, route, onAddStop, onRemoveStop, onUpdateStop, onSetDepot, 
-  onOptimize, onSaveRoute, onLoadRoute, onDeleteRoute, // <--- RECIBIMOS LA PROP
+  onOptimize, onSaveRoute, onLoadRoute, onDeleteRoute,
   savedRoutes, loading, error, isOptimized
 }) => {
   const [query, setQuery] = useState('');
@@ -153,13 +153,15 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      <div className="w-full md:w-96 bg-white h-full flex flex-col shadow-2xl z-20 border-r border-slate-200 no-print">
+      {/* CAMBIO CLAVE AQUÍ: w-full h-full, sin shadow ni ancho fijo */}
+      <div className="w-full h-full flex flex-col bg-white md:border-r border-slate-200 no-print">
+        
         {/* HEADER */}
         <div className="bg-slate-900 p-4 pb-0">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2 text-white">
               <Navigation className="w-6 h-6 text-blue-400" />
-              <h1 className="text-xl font-bold tracking-tight">App rutas <span className="text-blue-500">Top Safe</span></h1>
+              <h1 className="text-xl font-bold tracking-tight">GeoRoute <span className="text-blue-500">Logistics</span></h1>
             </div>
             {/* BOTÓN DASHBOARD */}
             <button 
@@ -383,7 +385,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </>
         ) : (
-          /* VISTA DE RUTAS GUARDADAS (CON BOTÓN DE BORRAR) */
+          /* VISTA DE RUTAS GUARDADAS */
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
             {savedRoutes.length === 0 ? (
               <div className="text-center py-10 opacity-40">
