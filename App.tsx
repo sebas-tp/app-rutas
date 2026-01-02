@@ -191,7 +191,7 @@ const App: React.FC = () => {
         <div className="flex justify-between items-start border-b-4 border-slate-900 pb-4 mb-6">
           <div>
             <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Hoja de Ruta</h1>
-            <p className="text-sm text-slate-500 font-bold">{new Date().toLocaleDateString()} - GeoRoute Logistics</p>
+            <p className="text-sm text-slate-500 font-bold">{new Date().toLocaleDateString()} - GeoApp Top safe</p>
           </div>
           <div className="text-right">
             <p className="text-2xl font-black text-blue-600">{route ? (route.distance / 1000).toFixed(1) : 0} km</p>
@@ -237,7 +237,7 @@ const App: React.FC = () => {
 
         <div className="mt-12 pt-8 border-t border-slate-100 flex justify-between items-end">
           <div className="text-[10px] text-slate-400 font-medium">
-            GeoRoute Logistics - Documento generado automáticamente
+            GeoApp Optimizador de viajes  - Documento generado automáticamente
           </div>
           <div className="text-[10px] text-slate-300">
              Página 1/1
