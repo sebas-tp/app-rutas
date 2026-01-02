@@ -1,0 +1,7 @@
+{
+  "name": "GeoRoute Optimizer",
+  "description": "A logistics optimization tool for solving the Traveling Salesperson Problem (TSP) using OpenRouteService and OpenStreetMap.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

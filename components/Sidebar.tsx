@@ -1,0 +1,347 @@
+
+import React, { useState } from 'react';
+import { 
+  Search, Trash2, MapPin, Navigation, Loader2, Flag, 
+  ListOrdered, ChevronRight, Crosshair, User, Truck, 
+  Clock, MessageSquare, Save, FolderOpen, Share2, Printer, Info
+} from 'lucide-react';
+import { Stop, GeocodingResult, SavedRoute, RouteData } from '../types';
+import { geocodeSearch, reverseGeocode } from '../services/orsService';
+
+interface SidebarProps {
+  stops: Stop[];
+  route: RouteData | null;
+  onAddStop: (stop: Stop) => void;
+  onRemoveStop: (id: string) => void;
+  onUpdateStop: (id: string, updates: Partial<Stop>) => void;
+  onSetDepot: (id: string) => void;
+  onOptimize: () => void;
+  onSaveRoute: (name: string) => void;
+  onLoadRoute: (route: SavedRoute) => void;
+  savedRoutes: SavedRoute[];
+  loading: boolean;
+  error: string | null;
+  isOptimized: boolean;
+}
+
+const Sidebar: React.FC<SidebarProps> = ({
+  stops, route, onAddStop, onRemoveStop, onUpdateStop, onSetDepot, 
+  onOptimize, onSaveRoute, onLoadRoute, savedRoutes, 
+  loading, error, isOptimized
+}) => {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<GeocodingResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [activeTab, setActiveTab] = useState<'current' | 'saved'>('current');
+  const [expandedStop, setExpandedStop] = useState<string | null>(null);
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!query.trim()) return;
+    setSearching(true);
+    const coords = query.includes(',') ? query.split(',').map(n => parseFloat(n.trim())) : null;
+    let searchResults = await geocodeSearch(query);
+    if (coords && coords.length === 2 && !isNaN(coords[0])) {
+      searchResults = [{
+        label: `📍 Coordenadas: ${coords[0].toFixed(4)}, ${coords[1].toFixed(4)}`,
+        coordinates: [coords[1], coords[0]],
+        isFromCoords: true
+      }, ...searchResults];
+    }
+    setResults(searchResults);
+    setSearching(false);
+  };
+
+  const handleSelectResult = async (res: GeocodingResult) => {
+    let label = res.label;
+    if (res.isFromCoords) {
+      label = await reverseGeocode(res.coordinates[1], res.coordinates[0]);
+    }
+    onAddStop({
+      id: Math.random().toString(36).substr(2, 9),
+      address: label,
+      lat: res.coordinates[1],
+      lng: res.coordinates[0],
+      isDepot: stops.length === 0,
+      type: 'cliente',
+    });
+    setResults([]);
+    setQuery('');
+  };
+
+  const handleExportWhatsApp = () => {
+    const ordered = [...stops].sort((a, b) => (a.order || 0) - (b.order || 0));
+    const depot = stops.find(s => s.isDepot);
+    
+    // Generar link de Google Maps con todas las paradas (max 10)
+    const points = [depot, ...ordered.filter(s => !s.isDepot), depot].filter(Boolean);
+    const multiStopLink = `https://www.google.com/maps/dir/${points.map(p => `${p?.lat},${p?.lng}`).join('/')}`;
+
+    let text = `🚀 *HOJA DE RUTA OPTIMIZADA*\n`;
+    if (route) {
+      text += `📏 Distancia: ${(route.distance / 1000).toFixed(1)} km\n`;
+      text += `⏱️ Tiempo est.: ${Math.round(route.duration / 60)} min\n\n`;
+    }
+    
+    text += `🗺️ *RUTA COMPLETA EN GPS:*\n${multiStopLink}\n\n`;
+    text += `📋 *DESGLOSE DE PARADAS:*\n`;
+
+    ordered.forEach((s, i) => {
+      const icon = s.isDepot ? '🏠' : (s.type === 'proveedor' ? '📦' : '👤');
+      text += `${i + 1}. ${icon} *${s.address}*\n`;
+      if (s.timeWindow?.start) text += `   ⏰ Horario: ${s.timeWindow.start} - ${s.timeWindow.end}\n`;
+      if (s.comment) text += `   📝 Nota: ${s.comment}\n`;
+      text += `\n`;
+    });
+
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  const orderedStops = [...stops].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  return (
+    <div className="w-full md:w-96 bg-white h-full flex flex-col shadow-2xl z-20 border-r border-slate-200 no-print">
+      <div className="bg-slate-900 p-4 pb-0">
+        <div className="flex items-center gap-2 text-white mb-4">
+          <Navigation className="w-6 h-6 text-blue-400" />
+          <h1 className="text-xl font-bold tracking-tight">GeoRoute <span className="text-blue-500">Logistics</span></h1>
+        </div>
+        <div className="flex gap-4">
+          <button 
+            onClick={() => setActiveTab('current')}
+            className={`pb-2 px-2 text-xs font-bold uppercase tracking-wider transition-colors ${activeTab === 'current' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-500 hover:text-white'}`}
+          >
+            Ruta Actual
+          </button>
+          <button 
+            onClick={() => setActiveTab('saved')}
+            className={`pb-2 px-2 text-xs font-bold uppercase tracking-wider transition-colors ${activeTab === 'saved' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-500 hover:text-white'}`}
+          >
+            Guardadas ({savedRoutes.length})
+          </button>
+        </div>
+      </div>
+
+      {activeTab === 'current' ? (
+        <>
+          <div className="p-4 border-b border-slate-100 bg-white">
+            <form onSubmit={handleSearch} className="relative">
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar o pegar coordenadas..."
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+              <button className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600">
+                {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              </button>
+            </form>
+            {results.length > 0 && (
+              <ul className="absolute z-50 mt-1 w-80 bg-white shadow-2xl rounded-xl border border-slate-200 overflow-hidden">
+                {results.map((res, i) => (
+                  <li key={i} onClick={() => handleSelectResult(res)} className="p-3 text-xs hover:bg-blue-50 cursor-pointer border-b last:border-0 flex items-center gap-2">
+                    {res.isFromCoords ? <Crosshair className="w-3 h-3 text-blue-500" /> : <MapPin className="w-3 h-3 text-slate-400" />}
+                    <span className="truncate font-bold text-slate-700">{res.label}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
+            {isOptimized && route && (
+              <div className="bg-blue-600 text-white p-4 rounded-2xl shadow-lg mb-4 animate-in fade-in slide-in-from-top-4">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-xs font-bold uppercase tracking-widest opacity-80">Ruta Calculada</h3>
+                  <Info className="w-4 h-4 opacity-50" />
+                </div>
+                <div className="flex gap-6">
+                  <div>
+                    <p className="text-2xl font-black">{(route.distance / 1000).toFixed(1)} <span className="text-sm font-normal opacity-70">km</span></p>
+                    <p className="text-[10px] font-bold uppercase opacity-60">Distancia</p>
+                  </div>
+                  <div className="w-px h-8 bg-white/20 my-auto" />
+                  <div>
+                    <p className="text-2xl font-black">{Math.round(route.duration / 60)} <span className="text-sm font-normal opacity-70">min</span></p>
+                    <p className="text-[10px] font-bold uppercase opacity-60">Tiempo Est.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isOptimized && (
+              <div className="space-y-3">
+                <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Itinerario de Entrega</h2>
+                <div className="space-y-2 border-l-2 border-blue-200 ml-2 pl-4">
+                  {orderedStops.map((stop) => (
+                    <div 
+                      key={stop.id} 
+                      onClick={() => setExpandedStop(expandedStop === stop.id ? null : stop.id)}
+                      className="relative bg-white p-3 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:border-blue-300 transition-all"
+                    >
+                      <div className="absolute -left-[25px] top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-blue-600 border-2 border-white flex items-center justify-center text-[8px] text-white font-bold">
+                        {stop.isDepot ? 'D' : stop.order}
+                      </div>
+                      <p className="text-[11px] font-bold text-slate-900 truncate">{stop.address}</p>
+                      {stop.comment && <p className="text-[9px] text-slate-400 mt-0.5 italic truncate">{stop.comment}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="pt-2">
+              <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3">
+                {!isOptimized ? `Paradas (${stops.length})` : 'Gestionar Puntos'}
+              </h2>
+              <div className="space-y-2">
+                {stops.map((stop) => (
+                  <div key={stop.id} className={`bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden transition-all ${expandedStop === stop.id ? 'ring-2 ring-blue-500' : ''}`}>
+                    <div 
+                      className="p-3 flex items-center gap-3 cursor-pointer"
+                      onClick={() => setExpandedStop(expandedStop === stop.id ? null : stop.id)}
+                    >
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${stop.isDepot ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>
+                        {stop.isDepot ? <Flag className="w-4 h-4" /> : <MapPin className="w-4 h-4" />}
+                      </div>
+                      <div className="flex-1 min-w-0 text-left">
+                        <p className="text-[11px] font-bold text-slate-900 truncate leading-tight">{stop.address}</p>
+                        <span className="text-[9px] uppercase font-bold text-slate-400 flex items-center gap-1 mt-0.5">
+                          {stop.type === 'cliente' ? <User className="w-2 h-2" /> : <Truck className="w-2 h-2" />}
+                          {stop.type}
+                        </span>
+                      </div>
+                      <button onClick={(e) => { e.stopPropagation(); onRemoveStop(stop.id); }} className="text-slate-300 hover:text-red-500 p-1">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {expandedStop === stop.id && (
+                      <div className="p-3 border-t border-slate-50 bg-slate-50 space-y-3">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Tipo</label>
+                            <select 
+                              value={stop.type}
+                              onChange={(e) => onUpdateStop(stop.id, { type: e.target.value as any })}
+                              className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white"
+                            >
+                              <option value="cliente">Cliente</option>
+                              <option value="proveedor">Proveedor</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Rol</label>
+                            <button 
+                              onClick={() => onSetDepot(stop.id)}
+                              className={`w-full text-[10px] p-2 rounded-lg border font-bold transition-colors ${stop.isDepot ? 'bg-red-500 text-white border-red-600' : 'bg-white border-slate-200'}`}
+                            >
+                              {stop.isDepot ? 'DEPÓSITO' : 'FIJAR DEPÓSITO'}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Desde</label>
+                            <input 
+                              type="time" 
+                              value={stop.timeWindow?.start || ''} 
+                              onChange={(e) => onUpdateStop(stop.id, { timeWindow: { ...stop.timeWindow, start: e.target.value, end: stop.timeWindow?.end || '18:00' } })}
+                              className="w-full text-xs p-2 rounded-lg border border-slate-200"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Hasta</label>
+                            <input 
+                              type="time" 
+                              value={stop.timeWindow?.end || ''} 
+                              onChange={(e) => onUpdateStop(stop.id, { timeWindow: { ...stop.timeWindow, start: stop.timeWindow?.start || '09:00', end: e.target.value } })}
+                              className="w-full text-xs p-2 rounded-lg border border-slate-200"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold text-slate-500 uppercase">Comentario</label>
+                          <textarea 
+                            value={stop.comment || ''}
+                            onChange={(e) => onUpdateStop(stop.id, { comment: e.target.value })}
+                            className="w-full text-xs p-2 rounded-lg border border-slate-200 h-16 resize-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 bg-white border-t border-slate-200 space-y-2">
+            <div className="flex gap-2">
+              <button 
+                onClick={onOptimize}
+                disabled={loading || stops.length < 2}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-100 transition-all active:scale-95 text-xs uppercase"
+              >
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Navigation className="w-4 h-4 fill-white" /> Optimizar</>}
+              </button>
+              <button 
+                onClick={() => {
+                  const name = prompt("Nombre para esta ruta:");
+                  if (name) onSaveRoute(name);
+                }}
+                className="p-3 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200"
+                title="Guardar ruta"
+              >
+                <Save className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {isOptimized && (
+              <div className="grid grid-cols-2 gap-2">
+                <button 
+                  onClick={handleExportWhatsApp}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all text-[10px] uppercase"
+                >
+                  <Share2 className="w-3 h-3" /> WhatsApp
+                </button>
+                <button 
+                  onClick={() => window.print()}
+                  className="bg-slate-800 hover:bg-slate-900 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all text-[10px] uppercase"
+                >
+                  <Printer className="w-3 h-3" /> Reporte PDF
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
+          {savedRoutes.length === 0 ? (
+            <div className="text-center py-10 opacity-40">
+              <FolderOpen className="w-12 h-12 mx-auto mb-2" />
+              <p className="text-sm font-bold uppercase tracking-widest">No hay rutas guardadas</p>
+            </div>
+          ) : (
+            savedRoutes.map(route => (
+              <div 
+                key={route.id}
+                onClick={() => onLoadRoute(route)}
+                className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm cursor-pointer hover:border-blue-400 transition-all group"
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="font-black text-slate-900 group-hover:text-blue-600">{route.name}</h3>
+                  <span className="text-[10px] font-bold text-slate-400">{route.date}</span>
+                </div>
+                <p className="text-xs text-slate-500 mb-2">{route.stops.length} paradas en total</p>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Sidebar;
