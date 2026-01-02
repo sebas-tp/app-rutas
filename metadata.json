@@ -1,6 +1,6 @@
 {
-  "name": "GeoRoute Optimizer",
-  "description": "A logistics optimization tool for solving the Traveling Salesperson Problem (TSP) using OpenRouteService and OpenStreetMap.",
+  "name": "GeoApp optimizador rutas",
+  "description": "Una app para hacerte la tarea facil de optimizar rutas de envios - Desarrollada por Alegre Sebastián.",
   "requestFramePermissions": [
     "geolocation"
   ]
