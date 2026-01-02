@@ -17,9 +17,9 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
         manifest: {
-          name: 'GeoRoute Logistics',
-          short_name: 'GeoRoute',
-          description: 'Optimizador de rutas logísticas inteligente',
+          name: 'GeoApp Optimizador rutas',
+          short_name: 'GeoApp',
+          description: 'Optimizador de rutas logísticas inteligente - Desarrollado por Alegre Sebastian',
           theme_color: '#0f172a',
           background_color: '#ffffff',
           display: 'standalone',
