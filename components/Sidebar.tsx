@@ -161,7 +161,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2 text-white">
               <Navigation className="w-6 h-6 text-blue-400" />
-              <h1 className="text-xl font-bold tracking-tight">GeoRoute <span className="text-blue-500">Logistics</span></h1>
+              <h1 className="text-xl font-bold tracking-tight">GeoApp <span className="text-blue-500">Top Safe</span></h1>
             </div>
             {/* BOTÓN DASHBOARD */}
             <button 
