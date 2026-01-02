@@ -40,4 +40,7 @@ export interface SavedRoute {
   name: string;
   date: string;
   stops: Stop[];
+  totalDistance?: number; 
+  totalDuration?: number;
+  stopCount?: number;
 }
