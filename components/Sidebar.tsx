@@ -77,7 +77,6 @@ const Sidebar: React.FC<SidebarProps> = ({
     const depot = stops.find(s => s.isDepot);
     const points = [depot, ...ordered.filter(s => !s.isDepot), depot].filter(Boolean);
     const routeParams = points.map(p => `${p?.lat},${p?.lng}`).join('/');
-    // Enlace universal para abrir Google Maps en modo navegación
     const multiStopLink = `https://www.google.com/maps/dir/${routeParams}`;
 
     let text = `🚀 *HOJA DE RUTA OPTIMIZADA*\n`;
@@ -94,66 +93,71 @@ const Sidebar: React.FC<SidebarProps> = ({
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  // --- PDF GENERATOR (CORREGIDO PARA EVITAR CORTES) ---
+  // --- PDF GENERATOR (SOLUCIÓN DEFINITIVA: CLON + AUTO-HEIGHT) ---
   const handleDownloadPDF = async () => {
-    const element = document.getElementById('report-preview');
-    if (!element) return;
+    const originalElement = document.getElementById('report-preview');
+    if (!originalElement) return;
 
     setGeneratingPdf(true);
-    
-    // Guardamos estilos originales para restaurarlos después
-    const originalPosition = element.style.position;
-    const originalTop = element.style.top;
-    const originalLeft = element.style.left;
-    const originalZIndex = element.style.zIndex;
 
     try {
-      // 1. Preparación Táctica:
-      // Ponemos el reporte fijo en pantalla completa (oculto por z-index o capa superior)
-      // para asegurar que el navegador renderice todo el contenido antes de la foto.
-      element.style.visibility = 'visible';
-      element.style.position = 'fixed';
-      element.style.top = '0';
-      element.style.left = '0';
-      element.style.zIndex = '9999'; // Lo traemos al frente
-      element.style.background = 'white'; // Aseguramos fondo blanco
+      // 1. CLONAR: Creamos una copia del reporte para manipularla sin afectar la pantalla real
+      const clone = originalElement.cloneNode(true) as HTMLElement;
 
-      // 2. LA ESPERA (Vital):
-      // Damos 1.5 segundos para que Leaflet detecte el cambio de tamaño y cargue los mapas
+      // 2. CONFIGURAR CLON: 
+      // Lo forzamos a ser visible, fuera de pantalla, y con ALTURA AUTOMÁTICA
+      // Esto es clave: 'height: auto' permite que la tabla crezca todo lo necesario sin cortarse
+      clone.style.position = 'absolute';
+      clone.style.top = '-9999px';
+      clone.style.left = '0';
+      clone.style.visibility = 'visible';
+      clone.style.zIndex = '-9999';
+      clone.style.width = '794px'; // Ancho fijo A4 (a 96 DPI)
+      clone.style.height = 'auto'; // Altura flexible para que entre todo
+      clone.style.overflow = 'visible'; // Evita scrollbars
+      clone.style.background = 'white';
+      
+      // Lo agregamos al documento temporalmente para que el navegador lo renderice
+      document.body.appendChild(clone);
+
+      // 3. ESPERA TÁCTICA:
+      // Damos 1.5 segundos para que Leaflet (en el clon) cargue los mapas
       await new Promise(resolve => setTimeout(resolve, 1500));
 
-      // 3. Captura
-      const canvas = await html2canvas(element, {
-        scale: 2, // Alta calidad (Retina)
-        useCORS: true, // Permite imágenes externas (mapas)
+      // 4. CAPTURAR:
+      // Usamos las dimensiones REALES del clon (scrollHeight) para la foto
+      const canvas = await html2canvas(clone, {
+        scale: 2, // Alta calidad
+        useCORS: true,
         logging: false,
-        // Forzamos el ancho de un A4 en píxeles (aprox 210mm a 96dpi * escala)
-        windowWidth: 794 * 1.5, 
-        height: element.scrollHeight // Capturamos toda la altura
+        width: 794,
+        windowWidth: 794,
+        height: clone.scrollHeight, // Altura completa del contenido
+        windowHeight: clone.scrollHeight
       });
 
-      // 4. Restauración inmediata (para que el usuario no vea el reporte pegado)
-      element.style.visibility = 'hidden';
-      element.style.zIndex = originalZIndex;
-      element.style.position = originalPosition;
-      element.style.top = originalTop;
-      element.style.left = originalLeft;
+      // 5. LIMPIEZA: Borramos el clon
+      document.body.removeChild(clone);
 
-      // 5. Generación del archivo PDF
+      // 6. GENERAR PDF ADAPTABLE:
       const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      const imgWidth = 210; // Ancho A4 en mm
+      const pageHeight = 297; // Alto A4 en mm
       
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Ruta_${new Date().toLocaleDateString().replace(/\//g, '-')}.pdf`);
+      // Calculamos qué tan alto quedó el reporte en milímetros
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      // SI EL CONTENIDO ES MÁS LARGO QUE UNA HOJA A4:
+      // Creamos un PDF con altura personalizada (Custom Page Size) para que no corte nada.
+      // Es mejor un PDF largo que uno cortado.
+      const pdf = new jsPDF('p', 'mm', [imgWidth, Math.max(imgHeight, pageHeight)]);
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+      pdf.save(`Ruta_Logistica_${new Date().toLocaleDateString().replace(/\//g, '-')}.pdf`);
 
     } catch (err) {
       console.error("Error generando PDF", err);
-      alert("Hubo un error al generar el PDF. Intenta de nuevo.");
-      // Restauración de emergencia
-      element.style.visibility = 'hidden';
-      element.style.zIndex = '-1000';
+      alert("Hubo un error al generar el PDF.");
     } finally {
       setGeneratingPdf(false);
     }
