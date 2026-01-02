@@ -2,56 +2,57 @@ import { db } from '../firebase/config';
 import { collection, addDoc, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
 import { SavedRoute, Stop, RouteData } from '../types';
 
-// Nombre de la colección en Firebase (equivalente a una "carpeta" o "tabla")
 const COLLECTION_NAME = 'rutas';
 
-// Definimos qué datos exactos vamos a guardar en cada documento
 interface RouteDocument {
   name: string;
-  date: string;       // Fecha legible (ej: "2/1/2026")
-  createdAt: any;     // Marca de tiempo exacta para ordenar
+  date: string;       
+  createdAt: any;     
   stops: Stop[];
-  // Datos extra para futuras métricas del panel de gerente:
   totalDistance: number; 
   totalDuration: number;
   stopCount: number;
 }
 
-// --- FUNCIÓN 1: GUARDAR RUTA EN LA NUBE ---
 export const saveRouteToCloud = async (name: string, stops: Stop[], routeData: RouteData | null) => {
   try {
+    // --- PASO DE LIMPIEZA (SANITIZATION) ---
+    // Firebase odia los 'undefined', así que los convertimos a 'null' o strings vacíos
+    const sanitizedStops = stops.map(stop => ({
+      ...stop,
+      // Si order es undefined, lo guardamos como null
+      order: stop.order ?? null, 
+      // Si comment es undefined, lo guardamos como texto vacío
+      comment: stop.comment || "", 
+      // Si timeWindow es undefined, lo guardamos como null
+      timeWindow: stop.timeWindow || null 
+    }));
+
     const docData: RouteDocument = {
       name,
       date: new Date().toLocaleDateString(),
-      createdAt: Timestamp.now(), // Usamos la hora del servidor
-      stops,
-      // Guardamos métricas clave ahora (aunque no las mostremos todavía)
-      // para poder hacer gráficos en el futuro.
+      createdAt: Timestamp.now(),
+      stops: sanitizedStops, // <--- Enviamos la versión limpia
       totalDistance: routeData ? routeData.distance : 0,
       totalDuration: routeData ? routeData.duration : 0,
       stopCount: stops.length
     };
 
-    // "addDoc" crea un documento nuevo con un ID autogenerado único
     const docRef = await addDoc(collection(db, COLLECTION_NAME), docData);
     console.log("Ruta guardada exitosamente con ID: ", docRef.id);
     
     return { ...docData, id: docRef.id };
   } catch (e) {
     console.error("Error al guardar ruta en Firebase: ", e);
-    throw e; // Relanzamos el error para manejarlo en la UI
+    throw e;
   }
 };
 
-// --- FUNCIÓN 2: LEER RUTAS DE LA NUBE ---
 export const getRoutesFromCloud = async (): Promise<SavedRoute[]> => {
   try {
-    // Pedimos la colección 'rutas', ordenadas por 'createdAt' descendente (nuevas primero)
     const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'desc'));
-    
     const querySnapshot = await getDocs(q);
     
-    // Convertimos los documentos de Firebase a nuestro formato 'SavedRoute'
     return querySnapshot.docs.map(doc => {
       const data = doc.data() as RouteDocument;
       return {
@@ -63,7 +64,6 @@ export const getRoutesFromCloud = async (): Promise<SavedRoute[]> => {
     });
   } catch (e) {
     console.error("Error al leer rutas de Firebase: ", e);
-    // Si falla (ej: sin internet), devolvemos lista vacía para que la app no se rompa
     return [];
   }
 };
