@@ -3,8 +3,8 @@ import {
   Search, Trash2, MapPin, Navigation, Loader2, Flag, 
   User, Truck, Save, FolderOpen, Share2, FileDown, Info, Crosshair
 } from 'lucide-react';
-import html2canvas from 'html2canvas'; // Importar librería
-import jsPDF from 'jspdf';             // Importar librería
+import html2canvas from 'html2canvas'; 
+import jsPDF from 'jspdf';             
 import { Stop, GeocodingResult, SavedRoute, RouteData } from '../types';
 import { geocodeSearch, reverseGeocode } from '../services/orsService';
 
@@ -77,6 +77,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     const depot = stops.find(s => s.isDepot);
     const points = [depot, ...ordered.filter(s => !s.isDepot), depot].filter(Boolean);
     const routeParams = points.map(p => `${p?.lat},${p?.lng}`).join('/');
+    // Enlace universal para abrir Google Maps en modo navegación
     const multiStopLink = `https://www.google.com/maps/dir/${routeParams}`;
 
     let text = `🚀 *HOJA DE RUTA OPTIMIZADA*\n`;
@@ -93,30 +94,52 @@ const Sidebar: React.FC<SidebarProps> = ({
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  // --- PDF GENERATOR (NUEVO) ---
+  // --- PDF GENERATOR (CORREGIDO PARA EVITAR CORTES) ---
   const handleDownloadPDF = async () => {
     const element = document.getElementById('report-preview');
     if (!element) return;
 
     setGeneratingPdf(true);
-    try {
-      // 1. Hacemos visible el elemento temporalmente para la foto
-      element.style.visibility = 'visible';
-      element.style.zIndex = '9999'; 
+    
+    // Guardamos estilos originales para restaurarlos después
+    const originalPosition = element.style.position;
+    const originalTop = element.style.top;
+    const originalLeft = element.style.left;
+    const originalZIndex = element.style.zIndex;
 
-      // 2. Tomamos la "foto" con html2canvas
-      // useCORS: true es CRÍTICO para que cargue los mapas de OpenStreetMap
+    try {
+      // 1. Preparación Táctica:
+      // Ponemos el reporte fijo en pantalla completa (oculto por z-index o capa superior)
+      // para asegurar que el navegador renderice todo el contenido antes de la foto.
+      element.style.visibility = 'visible';
+      element.style.position = 'fixed';
+      element.style.top = '0';
+      element.style.left = '0';
+      element.style.zIndex = '9999'; // Lo traemos al frente
+      element.style.background = 'white'; // Aseguramos fondo blanco
+
+      // 2. LA ESPERA (Vital):
+      // Damos 1.5 segundos para que Leaflet detecte el cambio de tamaño y cargue los mapas
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // 3. Captura
       const canvas = await html2canvas(element, {
-        scale: 2, // Mejor calidad
-        useCORS: true, 
-        logging: false
+        scale: 2, // Alta calidad (Retina)
+        useCORS: true, // Permite imágenes externas (mapas)
+        logging: false,
+        // Forzamos el ancho de un A4 en píxeles (aprox 210mm a 96dpi * escala)
+        windowWidth: 794 * 1.5, 
+        height: element.scrollHeight // Capturamos toda la altura
       });
 
-      // 3. Volvemos a esconderlo
+      // 4. Restauración inmediata (para que el usuario no vea el reporte pegado)
       element.style.visibility = 'hidden';
-      element.style.zIndex = '-1000';
+      element.style.zIndex = originalZIndex;
+      element.style.position = originalPosition;
+      element.style.top = originalTop;
+      element.style.left = originalLeft;
 
-      // 4. Generamos el PDF
+      // 5. Generación del archivo PDF
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -124,9 +147,13 @@ const Sidebar: React.FC<SidebarProps> = ({
       
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       pdf.save(`Ruta_${new Date().toLocaleDateString().replace(/\//g, '-')}.pdf`);
+
     } catch (err) {
       console.error("Error generando PDF", err);
       alert("Hubo un error al generar el PDF. Intenta de nuevo.");
+      // Restauración de emergencia
+      element.style.visibility = 'hidden';
+      element.style.zIndex = '-1000';
     } finally {
       setGeneratingPdf(false);
     }
