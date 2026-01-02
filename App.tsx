@@ -51,7 +51,6 @@ const App: React.FC = () => {
   const handleRemoveStop = (id: string) => {
     setStops(prev => {
       const filtered = prev.filter(s => s.id !== id);
-      // Si borramos el depósito, el siguiente en la lista pasa a ser depósito por seguridad
       if (prev.find(s => s.id === id)?.isDepot && filtered.length > 0) {
         filtered[0].isDepot = true;
       }
@@ -91,14 +90,12 @@ const App: React.FC = () => {
       const result = await optimizeRoute(stops);
       setRoute(result);
 
-      // Asignar el orden devuelto por la API a nuestras paradas
       const updatedStops = [...stops].map(s => ({ ...s, order: undefined }));
       const otherStops = stops.filter(s => !s.isDepot);
       
       let stepCounter = 1;
       result.steps.forEach((step: any) => {
         if (step.type === 'job') {
-          // step.id viene del servicio (1, 2, 3...) y machea con el índice del array de trabajos
           const originalStop = otherStops[step.id - 1];
           const st = updatedStops.find(s => s.id === originalStop?.id);
           if (st) st.order = stepCounter++;
@@ -113,11 +110,9 @@ const App: React.FC = () => {
     }
   };
 
-  // Ordenar para la tabla de impresión
   const orderedStops = [...stops].sort((a, b) => (a.order || 0) - (b.order || 0));
 
   return (
-    // CONTENEDOR PRINCIPAL: h-screen fuerza la altura total de la ventana
     <div className="flex flex-col md:flex-row h-screen w-full bg-slate-100 overflow-hidden font-sans">
       
       <Sidebar 
@@ -136,7 +131,6 @@ const App: React.FC = () => {
         isOptimized={!!route}
       />
       
-      {/* MAPA PRINCIPAL: flex-1 y h-full aseguran que ocupe todo el espacio restante */}
       <main className="flex-1 flex flex-col h-full relative no-print">
         <MapComponent stops={stops} route={route} onMapClick={handleMapClick} />
         
@@ -157,9 +151,12 @@ const App: React.FC = () => {
       </main>
 
       {/* =================================================================================
-          VISTA DE IMPRESIÓN (OCULTA EN PANTALLA, SOLO VISIBLE AL IMPRIMIR)
+          VISTA DE REPORTE OCULTA (Invisible pero renderizable para PDF)
          ================================================================================= */}
-      <div className="print-only print-container hidden w-full bg-white p-8">
+      <div 
+        id="report-preview" 
+        className="fixed top-0 left-0 w-[210mm] min-h-[297mm] bg-white p-8 z-[-1000] invisible"
+      >
         <div className="flex justify-between items-start border-b-4 border-slate-900 pb-4 mb-6">
           <div>
             <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Hoja de Ruta</h1>
@@ -171,10 +168,9 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Mapa estático para impresión */}
-        <div className="print-map border rounded-2xl overflow-hidden mb-8 h-[300px] w-full border-slate-200">
-           {/* Reutilizamos el componente, pero en modo estático (podrías simplificarlo si quisieras) */}
-          <MapComponent stops={stops} route={route} onMapClick={() => {}} />
+        {/* Mapa estático para el reporte */}
+        <div className="border rounded-2xl overflow-hidden mb-8 h-[350px] w-full border-slate-200">
+           {route && <MapComponent stops={stops} route={route} onMapClick={() => {}} />}
         </div>
 
         <div className="space-y-4">
@@ -186,23 +182,23 @@ const App: React.FC = () => {
                 <th className="py-2">Dirección / Punto</th>
                 <th className="py-2">Horario</th>
                 <th className="py-2">Tipo</th>
-                <th className="py-2">Observaciones</th>
+                <th className="py-2">Obs.</th>
               </tr>
             </thead>
             <tbody className="text-xs">
               {orderedStops.map((stop, idx) => (
                 <tr key={stop.id} className="border-b border-slate-50 last:border-0">
-                  <td className="py-4 text-center font-black text-blue-600">
+                  <td className="py-3 text-center font-black text-blue-600">
                     {stop.isDepot ? 'DEP' : stop.order || idx + 1}
                   </td>
-                  <td className="py-4 font-bold pr-4">{stop.address}</td>
-                  <td className="py-4">
+                  <td className="py-3 font-bold pr-2 max-w-[200px] truncate">{stop.address}</td>
+                  <td className="py-3 whitespace-nowrap">
                     {stop.timeWindow?.start ? `${stop.timeWindow.start} - ${stop.timeWindow.end}` : '-'}
                   </td>
-                  <td className="py-4 uppercase font-bold text-[9px] text-slate-400">
+                  <td className="py-3 uppercase font-bold text-[9px] text-slate-400">
                     {stop.type}
                   </td>
-                  <td className="py-4 text-slate-500 italic max-w-xs">{stop.comment || '-'}</td>
+                  <td className="py-3 text-slate-500 italic max-w-xs truncate">{stop.comment || '-'}</td>
                 </tr>
               ))}
             </tbody>
@@ -211,9 +207,11 @@ const App: React.FC = () => {
 
         <div className="mt-12 pt-8 border-t border-slate-100 flex justify-between items-end">
           <div className="text-[10px] text-slate-400 font-medium">
-            GeoRoute Logistics - Optimizador de Rutas TSP Pro
+            GeoRoute Logistics - Documento generado automáticamente
           </div>
-          <div className="w-32 h-1 bg-slate-100 rounded-full" />
+          <div className="text-[10px] text-slate-300">
+             Página 1/1
+          </div>
         </div>
       </div>
     </div>
