@@ -4,8 +4,8 @@ import Sidebar from './components/Sidebar';
 import MapComponent from './components/MapComponent';
 import { Stop, RouteData, SavedRoute } from './types';
 import { optimizeRoute, reverseGeocode } from './services/orsService';
-// IMPORTAMOS LOS NUEVOS SERVICIOS DE LA NUBE
-import { saveRouteToCloud, getRoutesFromCloud } from './services/routeService';
+// IMPORTAMOS LOS SERVICIOS INCLUYENDO EL DE BORRAR
+import { saveRouteToCloud, getRoutesFromCloud, deleteRouteFromCloud } from './services/routeService';
 
 const App: React.FC = () => {
   const [stops, setStops] = useState<Stop[]>([]);
@@ -13,11 +13,9 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
-  
-  // Nuevo estado para mostrar carga cuando guardamos/cargamos de la nube
   const [isCloudLoading, setIsCloudLoading] = useState(false);
 
-  // EFECTO DE CARGA INICIAL (Trae las rutas de Firebase)
+  // CARGA INICIAL
   useEffect(() => {
     const fetchRoutes = async () => {
       try {
@@ -76,23 +74,32 @@ const App: React.FC = () => {
     setRoute(null);
   };
 
-  // --- NUEVA LÓGICA DE GUARDADO (FIREBASE) ---
   const handleSaveRoute = async (name: string) => {
-    setIsCloudLoading(true); // Activamos spinner
+    setIsCloudLoading(true);
     try {
-      // 1. Guardamos en la nube
       await saveRouteToCloud(name, stops, route);
-      
-      // 2. Volvemos a pedir la lista actualizada para ver la nueva ruta
       const updatedRoutes = await getRoutesFromCloud();
       setSavedRoutes(updatedRoutes);
-      
       alert("✅ ¡Ruta guardada en la nube con éxito!");
     } catch (error) {
       console.error(error);
       alert("❌ Error al guardar en la nube. Revisa tu conexión.");
     } finally {
-      setIsCloudLoading(false); // Apagamos spinner
+      setIsCloudLoading(false);
+    }
+  };
+
+  // --- NUEVA LÓGICA DE BORRADO ---
+  const handleDeleteRoute = async (id: string) => {
+    if (!window.confirm("¿Estás seguro que querés eliminar esta ruta guardada?")) return;
+
+    try {
+      await deleteRouteFromCloud(id);
+      // Actualizamos la lista local filtrando la que acabamos de borrar
+      setSavedRoutes(prev => prev.filter(r => r.id !== id));
+    } catch (err) {
+      console.error(err);
+      alert("Error al eliminar la ruta.");
     }
   };
 
@@ -145,8 +152,8 @@ const App: React.FC = () => {
         onOptimize={handleOptimize}
         onSaveRoute={handleSaveRoute}
         onLoadRoute={handleLoadRoute}
+        onDeleteRoute={handleDeleteRoute} // <--- PASAMOS LA FUNCIÓN
         savedRoutes={savedRoutes}
-        // Mostramos carga si estamos optimizando O si estamos guardando en la nube
         loading={loading || isCloudLoading}
         error={error}
         isOptimized={!!route}
@@ -160,7 +167,7 @@ const App: React.FC = () => {
             <div className="bg-white p-6 rounded-3xl shadow-2xl flex flex-col items-center gap-4 border border-blue-100">
               <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
               <p className="font-black text-slate-800 uppercase tracking-widest text-[10px]">
-                {isCloudLoading ? 'Guardando en la nube...' : 'Optimizando logística...'}
+                {isCloudLoading ? 'Procesando en la nube...' : 'Optimizando logística...'}
               </p>
             </div>
           </div>
@@ -173,7 +180,6 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* --- VISTA DE REPORTE OCULTA (Para el PDF) --- */}
       <div id="report-preview" className="fixed top-0 left-0 w-[210mm] min-h-[297mm] bg-white p-8 z-[-1000] invisible">
         <div className="flex justify-between items-start border-b-4 border-slate-900 pb-4 mb-6">
           <div>
