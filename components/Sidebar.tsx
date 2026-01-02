@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Search, Trash2, MapPin, Navigation, Loader2, Flag, 
-  User, Truck, Save, FolderOpen, Share2, FileDown, Info, Crosshair
+  User, Truck, Save, FolderOpen, Share2, FileDown, Info, Crosshair, Clock
 } from 'lucide-react';
 import html2canvas from 'html2canvas'; 
 import jsPDF from 'jspdf';             
@@ -15,7 +15,7 @@ interface SidebarProps {
   onRemoveStop: (id: string) => void;
   onUpdateStop: (id: string, updates: Partial<Stop>) => void;
   onSetDepot: (id: string) => void;
-  onOptimize: () => void;
+  onOptimize: (startTime: string) => void; // <--- AHORA RECIBE LA HORA
   onSaveRoute: (name: string) => void;
   onLoadRoute: (route: SavedRoute) => void;
   savedRoutes: SavedRoute[];
@@ -35,6 +35,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [activeTab, setActiveTab] = useState<'current' | 'saved'>('current');
   const [expandedStop, setExpandedStop] = useState<string | null>(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  
+  // Nuevo estado para la hora de salida (Por defecto 08:00 AM)
+  const [startTime, setStartTime] = useState('08:00');
 
   // --- BUSCADOR ---
   const handleSearch = async (e: React.FormEvent) => {
@@ -81,6 +84,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
     let text = `🚀 *HOJA DE RUTA OPTIMIZADA*\n`;
     if (route) {
+      text += `📅 Salida: ${startTime} hs\n`;
       text += `📏 Distancia: ${(route.distance / 1000).toFixed(1)} km\n`;
       text += `⏱️ Tiempo est.: ${Math.round(route.duration / 60)} min\n\n`;
     }
@@ -93,7 +97,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  // --- PDF GENERATOR (SOLUCIÓN DEFINITIVA: CLON + AUTO-HEIGHT) ---
+  // --- PDF GENERATOR (SOLUCIÓN CLON + AUTO-HEIGHT) ---
   const handleDownloadPDF = async () => {
     const originalElement = document.getElementById('report-preview');
     if (!originalElement) return;
@@ -101,63 +105,51 @@ const Sidebar: React.FC<SidebarProps> = ({
     setGeneratingPdf(true);
 
     try {
-      // 1. CLONAR: Creamos una copia del reporte para manipularla sin afectar la pantalla real
+      // 1. Clonar el reporte para no romper la UI
       const clone = originalElement.cloneNode(true) as HTMLElement;
 
-      // 2. CONFIGURAR CLON: 
-      // Lo forzamos a ser visible, fuera de pantalla, y con ALTURA AUTOMÁTICA
-      // Esto es clave: 'height: auto' permite que la tabla crezca todo lo necesario sin cortarse
+      // 2. Configurar clon (Visible pero fuera de pantalla, altura automática)
       clone.style.position = 'absolute';
       clone.style.top = '-9999px';
       clone.style.left = '0';
       clone.style.visibility = 'visible';
       clone.style.zIndex = '-9999';
-      clone.style.width = '794px'; // Ancho fijo A4 (a 96 DPI)
-      clone.style.height = 'auto'; // Altura flexible para que entre todo
-      clone.style.overflow = 'visible'; // Evita scrollbars
+      clone.style.width = '794px'; // A4 width px (96dpi)
+      clone.style.height = 'auto'; // Altura flexible
+      clone.style.overflow = 'visible';
       clone.style.background = 'white';
       
-      // Lo agregamos al documento temporalmente para que el navegador lo renderice
       document.body.appendChild(clone);
 
-      // 3. ESPERA TÁCTICA:
-      // Damos 1.5 segundos para que Leaflet (en el clon) cargue los mapas
+      // 3. Esperar a que carguen los mapas del clon
       await new Promise(resolve => setTimeout(resolve, 1500));
 
-      // 4. CAPTURAR:
-      // Usamos las dimensiones REALES del clon (scrollHeight) para la foto
+      // 4. Capturar
       const canvas = await html2canvas(clone, {
-        scale: 2, // Alta calidad
+        scale: 2,
         useCORS: true,
         logging: false,
         width: 794,
         windowWidth: 794,
-        height: clone.scrollHeight, // Altura completa del contenido
+        height: clone.scrollHeight,
         windowHeight: clone.scrollHeight
       });
 
-      // 5. LIMPIEZA: Borramos el clon
       document.body.removeChild(clone);
 
-      // 6. GENERAR PDF ADAPTABLE:
+      // 5. Generar PDF (Tamaño dinámico si es muy largo)
       const imgData = canvas.toDataURL('image/png');
-      const imgWidth = 210; // Ancho A4 en mm
-      const pageHeight = 297; // Alto A4 en mm
-      
-      // Calculamos qué tan alto quedó el reporte en milímetros
+      const imgWidth = 210; // mm
+      const pageHeight = 297; // mm
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-      // SI EL CONTENIDO ES MÁS LARGO QUE UNA HOJA A4:
-      // Creamos un PDF con altura personalizada (Custom Page Size) para que no corte nada.
-      // Es mejor un PDF largo que uno cortado.
       const pdf = new jsPDF('p', 'mm', [imgWidth, Math.max(imgHeight, pageHeight)]);
-      
       pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
       pdf.save(`Ruta_Logistica_${new Date().toLocaleDateString().replace(/\//g, '-')}.pdf`);
 
     } catch (err) {
-      console.error("Error generando PDF", err);
-      alert("Hubo un error al generar el PDF.");
+      console.error("Error PDF", err);
+      alert("Error al generar PDF.");
     } finally {
       setGeneratingPdf(false);
     }
@@ -331,11 +323,25 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
 
-          {/* BOTONES DE ACCIÓN */}
+          {/* BOTONES DE ACCIÓN (INCLUYE INPUT DE HORA) */}
           <div className="p-4 bg-white border-t border-slate-200 space-y-2">
+            
+            {/* INPUT DE HORA DE SALIDA */}
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 mb-2">
+              <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-2 mb-1">
+                <Clock className="w-3 h-3" /> Hora de Salida de Fábrica
+              </label>
+              <input 
+                type="time" 
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="w-full text-sm font-bold text-slate-700 bg-white p-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+
             <div className="flex gap-2">
               <button 
-                onClick={onOptimize}
+                onClick={() => onOptimize(startTime)} // <--- ENVIAMOS LA HORA
                 disabled={loading || stops.length < 2}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-100 transition-all active:scale-95 text-xs uppercase"
               >
