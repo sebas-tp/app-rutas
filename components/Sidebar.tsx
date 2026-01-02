@@ -1,10 +1,10 @@
-
 import React, { useState } from 'react';
 import { 
   Search, Trash2, MapPin, Navigation, Loader2, Flag, 
-  ListOrdered, ChevronRight, Crosshair, User, Truck, 
-  Clock, MessageSquare, Save, FolderOpen, Share2, Printer, Info
+  User, Truck, Save, FolderOpen, Share2, FileDown, Info, Crosshair
 } from 'lucide-react';
+import html2canvas from 'html2canvas'; // Importar librería
+import jsPDF from 'jspdf';             // Importar librería
 import { Stop, GeocodingResult, SavedRoute, RouteData } from '../types';
 import { geocodeSearch, reverseGeocode } from '../services/orsService';
 
@@ -34,7 +34,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [searching, setSearching] = useState(false);
   const [activeTab, setActiveTab] = useState<'current' | 'saved'>('current');
   const [expandedStop, setExpandedStop] = useState<string | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
+  // --- BUSCADOR ---
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
@@ -69,38 +71,72 @@ const Sidebar: React.FC<SidebarProps> = ({
     setQuery('');
   };
 
+  // --- WHATSAPP ---
   const handleExportWhatsApp = () => {
     const ordered = [...stops].sort((a, b) => (a.order || 0) - (b.order || 0));
     const depot = stops.find(s => s.isDepot);
-    
-    // Generar link de Google Maps con todas las paradas (max 10)
     const points = [depot, ...ordered.filter(s => !s.isDepot), depot].filter(Boolean);
-    const multiStopLink = `https://www.google.com/maps/dir/${points.map(p => `${p?.lat},${p?.lng}`).join('/')}`;
+    const routeParams = points.map(p => `${p?.lat},${p?.lng}`).join('/');
+    const multiStopLink = `https://www.google.com/maps/dir/${routeParams}`;
 
     let text = `🚀 *HOJA DE RUTA OPTIMIZADA*\n`;
     if (route) {
       text += `📏 Distancia: ${(route.distance / 1000).toFixed(1)} km\n`;
       text += `⏱️ Tiempo est.: ${Math.round(route.duration / 60)} min\n\n`;
     }
-    
-    text += `🗺️ *RUTA COMPLETA EN GPS:*\n${multiStopLink}\n\n`;
-    text += `📋 *DESGLOSE DE PARADAS:*\n`;
-
+    text += `🗺️ *ABRIR GPS:* ${multiStopLink}\n\n📋 *PARADAS:*\n`;
     ordered.forEach((s, i) => {
-      const icon = s.isDepot ? '🏠' : (s.type === 'proveedor' ? '📦' : '👤');
-      text += `${i + 1}. ${icon} *${s.address}*\n`;
-      if (s.timeWindow?.start) text += `   ⏰ Horario: ${s.timeWindow.start} - ${s.timeWindow.end}\n`;
-      if (s.comment) text += `   📝 Nota: ${s.comment}\n`;
-      text += `\n`;
+      const icon = s.isDepot ? '🏭' : (s.type === 'proveedor' ? '📦' : '👤');
+      text += `*${i + 1}.* ${icon} ${s.address.split(',')[0]}\n`; 
+      if (s.timeWindow?.start) text += `   ⏰ ${s.timeWindow.start} - ${s.timeWindow.end}\n`;
     });
-
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  // --- PDF GENERATOR (NUEVO) ---
+  const handleDownloadPDF = async () => {
+    const element = document.getElementById('report-preview');
+    if (!element) return;
+
+    setGeneratingPdf(true);
+    try {
+      // 1. Hacemos visible el elemento temporalmente para la foto
+      element.style.visibility = 'visible';
+      element.style.zIndex = '9999'; 
+
+      // 2. Tomamos la "foto" con html2canvas
+      // useCORS: true es CRÍTICO para que cargue los mapas de OpenStreetMap
+      const canvas = await html2canvas(element, {
+        scale: 2, // Mejor calidad
+        useCORS: true, 
+        logging: false
+      });
+
+      // 3. Volvemos a esconderlo
+      element.style.visibility = 'hidden';
+      element.style.zIndex = '-1000';
+
+      // 4. Generamos el PDF
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Ruta_${new Date().toLocaleDateString().replace(/\//g, '-')}.pdf`);
+    } catch (err) {
+      console.error("Error generando PDF", err);
+      alert("Hubo un error al generar el PDF. Intenta de nuevo.");
+    } finally {
+      setGeneratingPdf(false);
+    }
   };
 
   const orderedStops = [...stops].sort((a, b) => (a.order || 0) - (b.order || 0));
 
   return (
     <div className="w-full md:w-96 bg-white h-full flex flex-col shadow-2xl z-20 border-r border-slate-200 no-print">
+      {/* HEADER */}
       <div className="bg-slate-900 p-4 pb-0">
         <div className="flex items-center gap-2 text-white mb-4">
           <Navigation className="w-6 h-6 text-blue-400" />
@@ -124,13 +160,14 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {activeTab === 'current' ? (
         <>
-          <div className="p-4 border-b border-slate-100 bg-white">
+          {/* BUSCADOR */}
+          <div className="p-4 border-b border-slate-100 bg-white z-50">
             <form onSubmit={handleSearch} className="relative">
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar o pegar coordenadas..."
+                placeholder="Buscar dir. o coordenadas..."
                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none"
               />
               <button className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600">
@@ -138,9 +175,9 @@ const Sidebar: React.FC<SidebarProps> = ({
               </button>
             </form>
             {results.length > 0 && (
-              <ul className="absolute z-50 mt-1 w-80 bg-white shadow-2xl rounded-xl border border-slate-200 overflow-hidden">
+              <ul className="absolute mt-1 w-80 bg-white shadow-2xl rounded-xl border border-slate-200 overflow-hidden">
                 {results.map((res, i) => (
-                  <li key={i} onClick={() => handleSelectResult(res)} className="p-3 text-xs hover:bg-blue-50 cursor-pointer border-b last:border-0 flex items-center gap-2">
+                  <li key={i} onClick={() => handleSelectResult(res)} className="p-3 text-xs hover:bg-blue-50 cursor-pointer border-b flex items-center gap-2">
                     {res.isFromCoords ? <Crosshair className="w-3 h-3 text-blue-500" /> : <MapPin className="w-3 h-3 text-slate-400" />}
                     <span className="truncate font-bold text-slate-700">{res.label}</span>
                   </li>
@@ -149,11 +186,12 @@ const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
 
+          {/* LISTA DE PARADAS */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
             {isOptimized && route && (
               <div className="bg-blue-600 text-white p-4 rounded-2xl shadow-lg mb-4 animate-in fade-in slide-in-from-top-4">
                 <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-xs font-bold uppercase tracking-widest opacity-80">Ruta Calculada</h3>
+                  <h3 className="text-xs font-bold uppercase tracking-widest opacity-80">Resumen</h3>
                   <Info className="w-4 h-4 opacity-50" />
                 </div>
                 <div className="flex gap-6">
@@ -164,7 +202,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                   <div className="w-px h-8 bg-white/20 my-auto" />
                   <div>
                     <p className="text-2xl font-black">{Math.round(route.duration / 60)} <span className="text-sm font-normal opacity-70">min</span></p>
-                    <p className="text-[10px] font-bold uppercase opacity-60">Tiempo Est.</p>
+                    <p className="text-[10px] font-bold uppercase opacity-60">Tiempo</p>
                   </div>
                 </div>
               </div>
@@ -172,7 +210,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
             {isOptimized && (
               <div className="space-y-3">
-                <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Itinerario de Entrega</h2>
+                <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Orden de Visita</h2>
                 <div className="space-y-2 border-l-2 border-blue-200 ml-2 pl-4">
                   {orderedStops.map((stop) => (
                     <div 
@@ -184,7 +222,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                         {stop.isDepot ? 'D' : stop.order}
                       </div>
                       <p className="text-[11px] font-bold text-slate-900 truncate">{stop.address}</p>
-                      {stop.comment && <p className="text-[9px] text-slate-400 mt-0.5 italic truncate">{stop.comment}</p>}
                     </div>
                   ))}
                 </div>
@@ -193,8 +230,9 @@ const Sidebar: React.FC<SidebarProps> = ({
 
             <div className="pt-2">
               <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3">
-                {!isOptimized ? `Paradas (${stops.length})` : 'Gestionar Puntos'}
+                {!isOptimized ? `Paradas cargadas (${stops.length})` : 'Editar Puntos'}
               </h2>
+              {/* LISTA SIMPLE DE EDICIÓN */}
               <div className="space-y-2">
                 {stops.map((stop) => (
                   <div key={stop.id} className={`bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden transition-all ${expandedStop === stop.id ? 'ring-2 ring-blue-500' : ''}`}>
@@ -208,7 +246,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                       <div className="flex-1 min-w-0 text-left">
                         <p className="text-[11px] font-bold text-slate-900 truncate leading-tight">{stop.address}</p>
                         <span className="text-[9px] uppercase font-bold text-slate-400 flex items-center gap-1 mt-0.5">
-                          {stop.type === 'cliente' ? <User className="w-2 h-2" /> : <Truck className="w-2 h-2" />}
                           {stop.type}
                         </span>
                       </div>
@@ -216,7 +253,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-
+                    {/* MENU DESPLEGABLE DE EDICION */}
                     {expandedStop === stop.id && (
                       <div className="p-3 border-t border-slate-50 bg-slate-50 space-y-3">
                         <div className="grid grid-cols-2 gap-2">
@@ -237,37 +274,23 @@ const Sidebar: React.FC<SidebarProps> = ({
                               onClick={() => onSetDepot(stop.id)}
                               className={`w-full text-[10px] p-2 rounded-lg border font-bold transition-colors ${stop.isDepot ? 'bg-red-500 text-white border-red-600' : 'bg-white border-slate-200'}`}
                             >
-                              {stop.isDepot ? 'DEPÓSITO' : 'FIJAR DEPÓSITO'}
+                              {stop.isDepot ? 'DEPÓSITO' : 'HACER DEPÓSITO'}
                             </button>
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[9px] font-bold text-slate-500 uppercase">Desde</label>
-                            <input 
-                              type="time" 
-                              value={stop.timeWindow?.start || ''} 
-                              onChange={(e) => onUpdateStop(stop.id, { timeWindow: { ...stop.timeWindow, start: e.target.value, end: stop.timeWindow?.end || '18:00' } })}
-                              className="w-full text-xs p-2 rounded-lg border border-slate-200"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] font-bold text-slate-500 uppercase">Hasta</label>
-                            <input 
-                              type="time" 
-                              value={stop.timeWindow?.end || ''} 
-                              onChange={(e) => onUpdateStop(stop.id, { timeWindow: { ...stop.timeWindow, start: stop.timeWindow?.start || '09:00', end: e.target.value } })}
-                              className="w-full text-xs p-2 rounded-lg border border-slate-200"
-                            />
-                          </div>
+                            <div>
+                                <label className="text-[9px] font-bold text-slate-500 uppercase">Desde</label>
+                                <input type="time" value={stop.timeWindow?.start || ''} onChange={(e) => onUpdateStop(stop.id, { timeWindow: { ...stop.timeWindow, start: e.target.value, end: stop.timeWindow?.end || '18:00' } })} className="w-full text-xs p-2 rounded-lg border border-slate-200"/>
+                            </div>
+                            <div>
+                                <label className="text-[9px] font-bold text-slate-500 uppercase">Hasta</label>
+                                <input type="time" value={stop.timeWindow?.end || ''} onChange={(e) => onUpdateStop(stop.id, { timeWindow: { ...stop.timeWindow, start: stop.timeWindow?.start || '09:00', end: e.target.value } })} className="w-full text-xs p-2 rounded-lg border border-slate-200"/>
+                            </div>
                         </div>
                         <div>
-                          <label className="text-[9px] font-bold text-slate-500 uppercase">Comentario</label>
-                          <textarea 
-                            value={stop.comment || ''}
-                            onChange={(e) => onUpdateStop(stop.id, { comment: e.target.value })}
-                            className="w-full text-xs p-2 rounded-lg border border-slate-200 h-16 resize-none"
-                          />
+                            <label className="text-[9px] font-bold text-slate-500 uppercase">Comentario</label>
+                            <textarea value={stop.comment || ''} onChange={(e) => onUpdateStop(stop.id, { comment: e.target.value })} className="w-full text-xs p-2 rounded-lg border border-slate-200 h-16 resize-none" />
                         </div>
                       </div>
                     )}
@@ -277,6 +300,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
 
+          {/* BOTONES DE ACCIÓN */}
           <div className="p-4 bg-white border-t border-slate-200 space-y-2">
             <div className="flex gap-2">
               <button 
@@ -307,16 +331,19 @@ const Sidebar: React.FC<SidebarProps> = ({
                   <Share2 className="w-3 h-3" /> WhatsApp
                 </button>
                 <button 
-                  onClick={() => window.print()}
+                  onClick={handleDownloadPDF}
+                  disabled={generatingPdf}
                   className="bg-slate-800 hover:bg-slate-900 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all text-[10px] uppercase"
                 >
-                  <Printer className="w-3 h-3" /> Reporte PDF
+                  {generatingPdf ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileDown className="w-3 h-3" />} 
+                  {generatingPdf ? 'Generando...' : 'Descargar PDF'}
                 </button>
               </div>
             )}
           </div>
         </>
       ) : (
+        /* VISTA DE RUTAS GUARDADAS */
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
           {savedRoutes.length === 0 ? (
             <div className="text-center py-10 opacity-40">
