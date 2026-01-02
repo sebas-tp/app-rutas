@@ -14,6 +14,7 @@ const App: React.FC = () => {
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
   const [isCloudLoading, setIsCloudLoading] = useState(false);
 
+  // CARGA INICIAL
   useEffect(() => {
     const fetchRoutes = async () => {
       try {
@@ -87,8 +88,10 @@ const App: React.FC = () => {
     }
   };
 
+  // --- LÓGICA DE BORRADO ---
   const handleDeleteRoute = async (id: string) => {
     if (!window.confirm("¿Estás seguro que querés eliminar esta ruta guardada?")) return;
+
     try {
       await deleteRouteFromCloud(id);
       setSavedRoutes(prev => prev.filter(r => r.id !== id));
@@ -111,8 +114,10 @@ const App: React.FC = () => {
     try {
       const result = await optimizeRoute(stops, startTime);
       setRoute(result);
+
       const updatedStops = [...stops].map(s => ({ ...s, order: undefined }));
       const otherStops = stops.filter(s => !s.isDepot);
+      
       let stepCounter = 1;
       result.steps.forEach((step: any) => {
         if (step.type === 'job') {
@@ -130,11 +135,15 @@ const App: React.FC = () => {
     }
   };
 
+  const orderedStops = [...stops].sort((a, b) => (a.order || 0) - (b.order || 0));
+
   return (
-    // CAMBIO IMPORTANTE: flex-col-reverse en mobile pone el menú abajo
+    // CAMBIO CLAVE: flex-col-reverse pone el Sidebar abajo en celulares
     <div className="flex flex-col-reverse md:flex-row h-screen w-full bg-slate-100 overflow-hidden font-sans">
       
-      {/* Sidebar con altura controlada en mobile */}
+      {/* CONTENEDOR DEL SIDEBAR */}
+      {/* En mobile: ancho 100%, altura 45% del viewport, sombra arriba */}
+      {/* En desktop: ancho 96 (fijo), altura 100%, sin sombra extra */}
       <div className="w-full md:w-96 h-[45vh] md:h-full flex-none z-30 shadow-[0_-4px_10px_rgba(0,0,0,0.1)] md:shadow-none bg-white">
         <Sidebar 
           stops={stops}
@@ -154,7 +163,8 @@ const App: React.FC = () => {
         />
       </div>
       
-      {/* Mapa ocupa el resto */}
+      {/* CONTENEDOR DEL MAPA */}
+      {/* Ocupa el espacio restante (flex-1) */}
       <main className="flex-1 flex flex-col h-full relative no-print min-h-0">
         <MapComponent stops={stops} route={route} onMapClick={handleMapClick} />
         
@@ -163,7 +173,7 @@ const App: React.FC = () => {
             <div className="bg-white p-6 rounded-3xl shadow-2xl flex flex-col items-center gap-4 border border-blue-100">
               <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
               <p className="font-black text-slate-800 uppercase tracking-widest text-[10px]">
-                {isCloudLoading ? 'Procesando en la nube...' : 'Optimizando...'}
+                {isCloudLoading ? 'Procesando en la nube...' : 'Optimizando logística...'}
               </p>
             </div>
           </div>
@@ -176,9 +186,63 @@ const App: React.FC = () => {
         )}
       </main>
 
+      {/* REPORTE PDF (Invisible) */}
       <div id="report-preview" className="fixed top-0 left-0 w-[210mm] min-h-[297mm] bg-white p-8 z-[-1000] invisible">
-         {/* ... Contenido del PDF (se mantiene igual, no lo copio todo para no hacer spam pero está en el código original) ... */}
-         {/* Si querés copiarlo completo, avisame y te pego la parte del PDF también, pero no cambia */}
+        <div className="flex justify-between items-start border-b-4 border-slate-900 pb-4 mb-6">
+          <div>
+            <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Hoja de Ruta</h1>
+            <p className="text-sm text-slate-500 font-bold">{new Date().toLocaleDateString()} - GeoRoute Logistics</p>
+          </div>
+          <div className="text-right">
+            <p className="text-2xl font-black text-blue-600">{route ? (route.distance / 1000).toFixed(1) : 0} km</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Distancia Total</p>
+          </div>
+        </div>
+
+        <div className="border rounded-2xl overflow-hidden mb-8 h-[350px] w-full border-slate-200">
+           {route && <MapComponent stops={stops} route={route} onMapClick={() => {}} />}
+        </div>
+
+        <div className="space-y-4">
+          <h2 className="text-xl font-black text-slate-900 border-b-2 border-slate-100 pb-2">Itinerario de Paradas</h2>
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="text-[10px] uppercase font-bold text-slate-400 border-b">
+                <th className="py-2 w-12 text-center">#</th>
+                <th className="py-2">Dirección / Punto</th>
+                <th className="py-2">Horario</th>
+                <th className="py-2">Tipo</th>
+                <th className="py-2">Obs.</th>
+              </tr>
+            </thead>
+            <tbody className="text-xs">
+              {orderedStops.map((stop, idx) => (
+                <tr key={stop.id} className="border-b border-slate-50 last:border-0">
+                  <td className="py-3 text-center font-black text-blue-600">
+                    {stop.isDepot ? 'DEP' : stop.order || idx + 1}
+                  </td>
+                  <td className="py-3 font-bold pr-2 max-w-[200px] truncate">{stop.address}</td>
+                  <td className="py-3 whitespace-nowrap">
+                    {stop.timeWindow?.start ? `${stop.timeWindow.start} - ${stop.timeWindow.end}` : '-'}
+                  </td>
+                  <td className="py-3 uppercase font-bold text-[9px] text-slate-400">
+                    {stop.type}
+                  </td>
+                  <td className="py-3 text-slate-500 italic max-w-xs truncate">{stop.comment || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-12 pt-8 border-t border-slate-100 flex justify-between items-end">
+          <div className="text-[10px] text-slate-400 font-medium">
+            GeoRoute Logistics - Documento generado automáticamente
+          </div>
+          <div className="text-[10px] text-slate-300">
+             Página 1/1
+          </div>
+        </div>
       </div>
     </div>
   );
