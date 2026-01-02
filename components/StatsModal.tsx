@@ -79,7 +79,7 @@ const StatsModal: React.FC<StatsModalProps> = ({ isOpen, onClose, routes }) => {
 
         {/* Footer */}
         <div className="bg-slate-50 p-4 text-center border-t border-slate-100">
-          <p className="text-[10px] text-slate-400 font-bold uppercase">Datos calculados desde Firebase Cloud</p>
+          <p className="text-[10px] text-slate-400 font-bold uppercase">Datos calculados desde la nube - Desarrollado por Alegre Sebastian</p>
         </div>
       </div>
     </div>
