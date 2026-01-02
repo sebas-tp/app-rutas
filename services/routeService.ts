@@ -1,25 +1,23 @@
 import { db } from '../firebase/config';
-import { collection, addDoc, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, orderBy, Timestamp, doc, deleteDoc } from 'firebase/firestore';
 import { SavedRoute, Stop, RouteData } from '../types';
 
 const COLLECTION_NAME = 'rutas';
 
-// Definimos la estructura exacta de lo que guardamos en la base de datos
 interface RouteDocument {
   name: string;
   date: string;       
   createdAt: any;     
   stops: Stop[];
-  // Campos para métricas (KPIs)
+  // Campos para métricas
   totalDistance: number; 
   totalDuration: number;
   stopCount: number;
 }
 
-// --- FUNCIÓN 1: GUARDAR RUTA (Con Métricas y Limpieza) ---
+// --- FUNCIÓN 1: GUARDAR RUTA ---
 export const saveRouteToCloud = async (name: string, stops: Stop[], routeData: RouteData | null) => {
   try {
-    // 1. SANITIZACIÓN: Limpiamos los datos para evitar errores de "undefined" en Firebase
     const sanitizedStops = stops.map(stop => ({
       ...stop,
       order: stop.order ?? null, 
@@ -27,19 +25,16 @@ export const saveRouteToCloud = async (name: string, stops: Stop[], routeData: R
       timeWindow: stop.timeWindow || null 
     }));
 
-    // 2. PREPARACIÓN: Armamos el objeto con datos extra para el dashboard
     const docData: RouteDocument = {
       name,
       date: new Date().toLocaleDateString(),
       createdAt: Timestamp.now(),
       stops: sanitizedStops,
-      // Guardamos las métricas calculadas (si no hay ruta calculada, van en 0)
       totalDistance: routeData ? routeData.distance : 0,
       totalDuration: routeData ? routeData.duration : 0,
       stopCount: stops.length
     };
 
-    // 3. ENVÍO: Subimos a la nube
     const docRef = await addDoc(collection(db, COLLECTION_NAME), docData);
     console.log("Ruta guardada exitosamente con ID: ", docRef.id);
     
@@ -50,7 +45,7 @@ export const saveRouteToCloud = async (name: string, stops: Stop[], routeData: R
   }
 };
 
-// --- FUNCIÓN 2: LEER RUTAS (Recuperando Métricas) ---
+// --- FUNCIÓN 2: LEER RUTAS ---
 export const getRoutesFromCloud = async (): Promise<SavedRoute[]> => {
   try {
     const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'desc'));
@@ -63,8 +58,6 @@ export const getRoutesFromCloud = async (): Promise<SavedRoute[]> => {
         name: data.name,
         date: data.date,
         stops: data.stops,
-        // MAPEO DE KPIs: Leemos los datos para el gráfico
-        // (Usamos || 0 por si es una ruta vieja que no tenía estos datos)
         totalDistance: data.totalDistance || 0, 
         totalDuration: data.totalDuration || 0,
         stopCount: data.stopCount || 0
@@ -73,5 +66,17 @@ export const getRoutesFromCloud = async (): Promise<SavedRoute[]> => {
   } catch (e) {
     console.error("Error al leer rutas de Firebase: ", e);
     return [];
+  }
+};
+
+// --- FUNCIÓN 3: BORRAR RUTA (NUEVA) ---
+export const deleteRouteFromCloud = async (id: string) => {
+  try {
+    const routeRef = doc(db, COLLECTION_NAME, id);
+    await deleteDoc(routeRef);
+    console.log("Ruta eliminada:", id);
+  } catch (e) {
+    console.error("Error al borrar ruta:", e);
+    throw e;
   }
 };
