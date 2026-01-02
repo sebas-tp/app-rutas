@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Navigation, Loader2, Flag, User, Truck, Clock, MapPin } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import MapComponent from './components/MapComponent';
 import { Stop, RouteData, SavedRoute } from './types';
@@ -13,6 +12,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
 
+  // Cargar rutas guardadas al iniciar
   useEffect(() => {
     const saved = localStorage.getItem('georoute_saved');
     if (saved) setSavedRoutes(JSON.parse(saved));
@@ -51,6 +51,7 @@ const App: React.FC = () => {
   const handleRemoveStop = (id: string) => {
     setStops(prev => {
       const filtered = prev.filter(s => s.id !== id);
+      // Si borramos el depósito, el siguiente en la lista pasa a ser depósito por seguridad
       if (prev.find(s => s.id === id)?.isDepot && filtered.length > 0) {
         filtered[0].isDepot = true;
       }
@@ -90,29 +91,35 @@ const App: React.FC = () => {
       const result = await optimizeRoute(stops);
       setRoute(result);
 
+      // Asignar el orden devuelto por la API a nuestras paradas
       const updatedStops = [...stops].map(s => ({ ...s, order: undefined }));
       const otherStops = stops.filter(s => !s.isDepot);
       
       let stepCounter = 1;
       result.steps.forEach((step: any) => {
         if (step.type === 'job') {
+          // step.id viene del servicio (1, 2, 3...) y machea con el índice del array de trabajos
           const originalStop = otherStops[step.id - 1];
-          const st = updatedStops.find(s => s.id === originalStop.id);
+          const st = updatedStops.find(s => s.id === originalStop?.id);
           if (st) st.order = stepCounter++;
         }
       });
       setStops(updatedStops);
     } catch (err: any) {
-      setError(err.message);
+      console.error(err);
+      setError(err.message || "Error al optimizar la ruta");
     } finally {
       setLoading(false);
     }
   };
 
+  // Ordenar para la tabla de impresión
   const orderedStops = [...stops].sort((a, b) => (a.order || 0) - (b.order || 0));
 
   return (
+    // CONTENEDOR PRINCIPAL: h-screen fuerza la altura total de la ventana
     <div className="flex flex-col md:flex-row h-screen w-full bg-slate-100 overflow-hidden font-sans">
+      
       <Sidebar 
         stops={stops}
         route={route}
@@ -129,7 +136,8 @@ const App: React.FC = () => {
         isOptimized={!!route}
       />
       
-      <main className="flex-1 h-[50vh] md:h-full relative no-print">
+      {/* MAPA PRINCIPAL: flex-1 y h-full aseguran que ocupe todo el espacio restante */}
+      <main className="flex-1 flex flex-col h-full relative no-print">
         <MapComponent stops={stops} route={route} onMapClick={handleMapClick} />
         
         {loading && (
@@ -140,9 +148,17 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
+
+        {error && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-[2000] shadow-lg">
+            <p className="text-xs font-bold">{error}</p>
+          </div>
+        )}
       </main>
 
-      {/* VISTA DE IMPRESIÓN (OCULTA EN PANTALLA) */}
+      {/* =================================================================================
+          VISTA DE IMPRESIÓN (OCULTA EN PANTALLA, SOLO VISIBLE AL IMPRIMIR)
+         ================================================================================= */}
       <div className="print-only print-container hidden w-full bg-white p-8">
         <div className="flex justify-between items-start border-b-4 border-slate-900 pb-4 mb-6">
           <div>
@@ -155,13 +171,15 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <div className="print-map border rounded-2xl overflow-hidden mb-8">
+        {/* Mapa estático para impresión */}
+        <div className="print-map border rounded-2xl overflow-hidden mb-8 h-[300px] w-full border-slate-200">
+           {/* Reutilizamos el componente, pero en modo estático (podrías simplificarlo si quisieras) */}
           <MapComponent stops={stops} route={route} onMapClick={() => {}} />
         </div>
 
         <div className="space-y-4">
           <h2 className="text-xl font-black text-slate-900 border-b-2 border-slate-100 pb-2">Itinerario de Paradas</h2>
-          <table className="w-full text-left">
+          <table className="w-full text-left border-collapse">
             <thead>
               <tr className="text-[10px] uppercase font-bold text-slate-400 border-b">
                 <th className="py-2 w-12 text-center">#</th>
